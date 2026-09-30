@@ -83,7 +83,7 @@ try {
     if ($InstallDir -eq [IO.Path]::GetPathRoot($InstallDir)) { throw 'InstallDir cannot be a drive root.' }
     if (-not $LanguageDir) { $LanguageDir = Join-Path $PSScriptRoot 'Claude-zh-CN' }
     $LanguageDir = [IO.Path]::GetFullPath($LanguageDir)
-    if (-not $Restore -and -not (Test-Path -LiteralPath (Join-Path $LanguageDir 'language-report.json'))) {
+    if (-not $Restore -and -not (Test-Path -LiteralPath (Join-Path $LanguageDir 'zh-CN.json'))) {
         throw 'Language bundle is missing. Keep the companion Claude-zh-CN directory beside this script.'
     }
     $PythonPath = Resolve-Runtime $PythonPath 'python.exe' @(
@@ -410,8 +410,8 @@ def main():
     language_report={}
     for rel in ['en-US.json','ion-dist/i18n/en-US.json','ion-dist/i18n/dynamic/en-US.json']:
         english=json.loads((app/'resources'/rel).read_text(encoding='utf8'))
-        baselines=json.loads((language/'english-baseline-sha256.json').read_text(encoding='utf8'))
-        baseline_matches=sha((app/'resources'/rel).read_bytes())==baselines[rel]
+        baseline_bytes=(language/'english-source'/rel).read_bytes()
+        baseline_matches=sha((app/'resources'/rel).read_bytes())==sha(baseline_bytes)
         target=rel.replace('en-US','zh-CN')
         pack=json.loads((language/target).read_text(encoding='utf8'))
         if not baseline_matches:
