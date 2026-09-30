@@ -1,0 +1,24 @@
+{
+  "appVersion": "2.16120.0.0",
+  "method": "Argos en_zh 1.9 local machine translation with manual UI overrides",
+  "modelSHA256": "433e7c4f034d87fbe2353161e05f18646d7999452f801a4e1f0378522b9850ab",
+  "icuStructuralValidation": true,
+  "stats": {
+    "zh-CN.json": {
+      "keys": 742,
+      "withChinese": 737,
+      "unchanged": 5
+    },
+    "ion-dist/i18n/zh-CN.json": {
+      "keys": 32243,
+      "withChinese": 31941,
+      "unchanged": 291
+    },
+    "ion-dist/i18n/dynamic/zh-CN.json": {
+      "keys": 49,
+      "withChinese": 49,
+      "unchanged": 0
+    }
+  },
+  "rejected": []
+}

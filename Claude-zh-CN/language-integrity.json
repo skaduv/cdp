@@ -1,0 +1,11 @@
+{
+  "english-baseline-sha256.json": "9189f684a00a631331af7b22eb348525178e4144dd95fa818951e6ae9142be4e",
+  "language-report.json": "1378fdb0b6fe858de4b3415f60b4ed30645c06e2cbfa535bae5a1e35c22b14d2",
+  "zh-CN.json": "35300e1879801c8dea79cb1dde5246395ac4289fd1feeb78e692baeffb98ecc7",
+  "english-source/en-US.json": "57249f660877d1943b5722a5dd1369152af8d6a8000ad993c1e399811860b4f6",
+  "english-source/ion-dist/i18n/en-US.json": "7be90ef84f48c5c9e23b6f34721c645ebf5fe16bbb918622c1e42933222ed5f7",
+  "english-source/ion-dist/i18n/dynamic/en-US.json": "79e1211bbad7a95915bd982f97e36757e8c54cabe00130a6c673e6796d85cee9",
+  "ion-dist/i18n/zh-CN.json": "087b3bde32d22642ab3ae3d04e388ce03ea47b03bb373f43ecba0289863298c4",
+  "ion-dist/i18n/zh-CN.overrides.json": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "ion-dist/i18n/dynamic/zh-CN.json": "5ef2cc5642e65213403114c3d5a701af1091d64f8e95f6e3cdeb6da86d54be52"
+}
