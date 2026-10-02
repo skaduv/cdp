@@ -2,6 +2,7 @@
 
 用于 Windows Claude Desktop 的本地 PowerShell 补丁脚本。生成可注册的开发版应用目录，无需重新打包或发布 MSIX。
 
+脚本在独立的开发版副本中按代码结构修改 ASAR 和前端 JavaScript，实现模型、工具与遥测相关调整，并同步更新 ASAR 完整性哈希及 EXE 内嵌哈希，修改前备份原始文件以支持恢复。
 
 ## 功能
 
@@ -23,14 +24,6 @@
 - Node.js，可通过 `PATH` 找到或使用 `-NodePath` 指定。
 - 激活修改版时，需要开启 Windows 开发者模式。
 
-运行补丁不需要安装 pip/npm 依赖。保留脚本旁的完整语言包目录。
-
-```text
-E:\
-├── Patch-ClaudeDesktop.ps1
-├── Claude-zh-CN\
-└── README.md
-```
 
 ## 快速开始
 
@@ -50,7 +43,7 @@ E:\
 powershell -NoProfile -ExecutionPolicy Bypass -File "\路径\Patch-ClaudeDesktop.ps1" -CheckOnly
 ```
 
-检查应用结构、语言资源及补丁结果，不修改程序资源或应用注册。
+在线获取语言资源并检查应用结构及补丁结果，不修改程序资源或应用注册。
 
 ### 3. 应用并激活
 
@@ -96,31 +89,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "\路径\Patch-ClaudeDesktop
 | `-Restore` | 恢复原始程序资源 |
 | `-InstallDir <路径>` | 指定修改副本目录 |
 | `-MsixPath <路径>` | 从原版 MSIX 提取应用 |
-| `-LanguageDir <路径>` | 指定语言包目录 |
+| `-LanguageDir <路径>` | 可选：指定含上游 desktop/frontend/statsig-zh-CN.json 的 resources 目录；默认在线下载 |
 | `-PythonPath <路径>` | 指定 Python 可执行文件 |
 | `-NodePath <路径>` | 指定 Node.js 可执行文件 |
 | `-NoLaunch` | 激活后不启动应用 |
 | `-Yes` | 跳过应用注册替换确认 |
 
-## 兼容性与验证
-
-脚本不限制固定版本号，按代码结构识别兼容构建。全部补丁匹配、语法和完整性校验通过后才修改资源；代码结构发生变化时会停止。
-
-目前已在 Claude Desktop **2.16120.0.0 x64** 的副本上验证：
-
-- PowerShell 检查与 JavaScript 语法。
-- 模型名称校验、发现清单合并及配置偏好保留。
-- 1p 遥测配置覆盖、工具搜索路由和 WebFetch 会话设置。
-- 实际写入、重复运行一致性及逐字节恢复。
-
-其他真实版本尚未验证。不要将新版程序覆盖到已有副本和备份上；应用升级后应使用新的 `-InstallDir` 重新检查。
 
 ## 已知限制
 
 - 修改 EXE 会使原 Anthropic 数字签名失效；脚本会重新计算并保留 ASAR 完整性校验。
 - 客户端仍使用 Anthropic Messages 协议；任意模型名称通过校验，不代表网关或模型支持全部工具协议。
 - 工具搜索、Computer Use 和 Browser Use 的实际可用性取决于后端能力、组织策略及系统授权。
-- 简体中文使用离线机器翻译并局部修订，尚未逐条人工审校；新版新增或改动的英文条目暂保留英文。
+- 简体中文来自上游语言资源；新版新增且上游尚未翻译的条目保留英文。
 - 遥测修改未经过完整联网抓包验收，独立 OTLP 导出不在覆盖范围内，不能保证所有遥测流量为零。
 
 ## 免责声明

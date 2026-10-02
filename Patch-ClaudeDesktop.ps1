@@ -1,11 +1,5 @@
 ﻿# Claude Desktop compatible builds: Gateway models + Simplified Chinese + CU/Browser.
-# Builds a loose development layout; does not repack or publish an MSIX.
-# Python 3.10+ and Node.js required. No Python/npm modules required to run patch.
-# Default: prepare patched copy. -Activate: replace current user's MSIX
-# registration with this development layout (Developer Mode required).
-# -Yes suppresses only the activation confirmation. -Restore restores resources.
-# Compatibility is checked against code structures before any resource writes.
-# Native system permissions, organization policies and service checks remain.
+
 [CmdletBinding()]
 param(
     [string]$MsixPath = '',
@@ -81,11 +75,7 @@ try {
     $InstallDir = [IO.Path]::GetFullPath($InstallDir)
     if ($InstallDir -match '(?i)\\WindowsApps(?:\\|$)') { throw 'Choose a directory outside WindowsApps.' }
     if ($InstallDir -eq [IO.Path]::GetPathRoot($InstallDir)) { throw 'InstallDir cannot be a drive root.' }
-    if (-not $LanguageDir) { $LanguageDir = Join-Path $PSScriptRoot 'Claude-zh-CN' }
-    $LanguageDir = [IO.Path]::GetFullPath($LanguageDir)
-    if (-not $Restore -and -not (Test-Path -LiteralPath (Join-Path $LanguageDir 'zh-CN.json'))) {
-        throw 'Language bundle is missing. Keep the companion Claude-zh-CN directory beside this script.'
-    }
+    if ($LanguageDir) { $LanguageDir = (Resolve-Path -LiteralPath $LanguageDir).Path }
     $PythonPath = Resolve-Runtime $PythonPath 'python.exe' @(
         (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe')
     )
@@ -138,6 +128,57 @@ try {
 Never operates on WindowsApps. PowerShell wrapper owns package registration.
 """
 import argparse, copy, hashlib, json, os, pathlib, re, shutil, struct, subprocess, sys, tempfile, xml.etree.ElementTree as ET
+
+import urllib.request, urllib.error, http.client, time
+
+REPOSITORY = 'https://github.com/javaht/claude-desktop-zh-cn'
+LANGUAGE_FILES = {
+    'zh-CN.json': 'desktop-zh-CN.json',
+    'ion-dist/i18n/zh-CN.json': 'frontend-zh-CN.json',
+    'ion-dist/i18n/statsig/zh-CN.json': 'statsig-zh-CN.json',
+}
+
+def fetch_language(url):
+    request = urllib.request.Request(url, headers={'User-Agent':'ClaudeDesktop-language-pack'})
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                return response.read()
+        except (urllib.error.URLError, http.client.IncompleteRead, TimeoutError):
+            if attempt == 2: raise
+            time.sleep(attempt + 1)
+
+def read_catalog(data, label):
+    value = json.loads(data)
+    if not isinstance(value, dict) or not all(isinstance(k,str) and isinstance(v,str) for k,v in value.items()):
+        raise ValueError('Invalid language catalog: ' + label)
+    return value
+
+def merged_catalogs(resources, directory=None):
+    revision = None
+    if directory is None:
+        revision = json.loads(fetch_language('https://api.github.com/repos/javaht/claude-desktop-zh-cn/commits/main'))['sha']
+        if not re.fullmatch(r'[0-9a-f]{40}', revision): raise ValueError('Invalid upstream revision')
+    packs = {}
+    for target, source in LANGUAGE_FILES.items():
+        data = (directory/source).read_bytes() if directory is not None else fetch_language(
+            f'https://raw.githubusercontent.com/javaht/claude-desktop-zh-cn/{revision}/resources/{source}')
+        packs[target] = read_catalog(data, source)
+        if not packs[target]: raise ValueError('Empty upstream language catalog: ' + source)
+    result = {}
+    for target, translations in packs.items():
+        english = resources/target.replace('zh-CN','en-US')
+        if english.is_file():
+            baseline = read_catalog(english.read_bytes(), str(english))
+            result[target] = {k:translations.get(k,v) for k,v in baseline.items()}
+        else: result[target] = translations
+    dynamic = resources/'ion-dist/i18n/dynamic/en-US.json'
+    if dynamic.is_file():
+        baseline = read_catalog(dynamic.read_bytes(), str(dynamic))
+        translations = packs['ion-dist/i18n/zh-CN.json']
+        result['ion-dist/i18n/dynamic/zh-CN.json'] = {k:translations.get(k,v) for k,v in baseline.items()}
+    result['ion-dist/i18n/zh-CN.overrides.json'] = {}
+    return result, revision
 
 VERSION = '2.16120.0.0'
 VALID_ID = r'typeof e==="string"&&e.trim().length>0&&!/[\x00-\x1f\x7f-\x9f]/.test(e)'
@@ -337,7 +378,7 @@ def restore(app,backup):
     log('Original application resources restored. User data was not changed.')
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--app',required=True);p.add_argument('--language',required=True)
+    p=argparse.ArgumentParser();p.add_argument('--app',required=True);p.add_argument('--language',default='')
     p.add_argument('--node',required=True);p.add_argument('--check-only',action='store_true');p.add_argument('--restore',action='store_true')
     args=p.parse_args();app=pathlib.Path(args.app).resolve();language=pathlib.Path(args.language)
     if 'windowsapps' in str(app).lower() and not args.check_only: raise ValueError('Refusing to modify WindowsApps')
@@ -355,11 +396,6 @@ def main():
         else: legacy_backup.rename(backup)
     if not args.check_only:backup.mkdir(parents=True,exist_ok=True)
     if args.restore:restore(app,backup);return
-    language_manifest=json.loads((language/'language-integrity.json').read_text(encoding='utf8'))
-    for rel,expected in language_manifest.items():
-        candidate=(language/rel).resolve()
-        if not candidate.is_relative_to(language.resolve()):raise ValueError('Invalid language manifest path')
-        if sha(candidate.read_bytes())!=expected:raise ValueError('Language bundle changed or corrupt: '+rel)
     inventory_path=backup/'inventory.json'
     inv=json.loads(inventory_path.read_text(encoding='utf8')) if inventory_path.exists() else {}
     baseline_asar=backup/'files/resources/app.asar'
@@ -408,23 +444,10 @@ def main():
         '"zh-CN":{name:"Chinese (Simplified)",localName:"简体中文"},"en-US":{name:"English (United States)",localName:"English (United States)"}',
         'language menu',report).encode('utf8')
     language_report={}
-    for rel in ['en-US.json','ion-dist/i18n/en-US.json','ion-dist/i18n/dynamic/en-US.json']:
-        english=json.loads((app/'resources'/rel).read_text(encoding='utf8'))
-        baseline_bytes=(language/'english-source'/rel).read_bytes()
-        baseline_matches=sha((app/'resources'/rel).read_bytes())==sha(baseline_bytes)
-        target=rel.replace('en-US','zh-CN')
-        pack=json.loads((language/target).read_text(encoding='utf8'))
-        if not baseline_matches:
-            # Reuse reviewed translations only for identical English values.
-            baseline_file=language/'english-source'/rel
-            if not baseline_file.exists(): raise ValueError('Cross-version English source baseline is missing')
-            baseline=json.loads(baseline_file.read_text(encoding='utf8'))
-            pack={k:pack[k] if k in pack and baseline.get(k)==v else v for k,v in english.items()}
-        if set(pack)!=set(english):raise ValueError('Language key mismatch: '+rel)
-        if not all(isinstance(x,str) for x in pack.values()):raise ValueError('Invalid translation value')
+    packs, revision = merged_catalogs(app/'resources', language if args.language else None)
+    for target, pack in packs.items():
         writes[app/'resources'/target]=dump(pack)
-        language_report[target]={'keys':len(pack),'englishBaselineMatches':baseline_matches,'withChinese':sum(bool(re.search(r'[\u3400-\u9fff]',x)) for x in pack.values())}
-    writes[app/'resources/ion-dist/i18n/zh-CN.overrides.json']=b'{}'
+        language_report[target]={'keys':len(pack),'withChinese':sum(bool(re.search(r'[\u3400-\u9fff]',x)) for x in pack.values())}
     new_asar,new_hash=build_asar(hdr,files,changes)
     exe_path=app/'claude.exe';bexe=backup/'files/claude.exe'
     exe=(bexe if bexe.exists() else exe_path).read_bytes()
@@ -437,7 +460,7 @@ def main():
         for path,b in writes.items():
             if path.suffix=='.js':syntax_check(args.node,b,td,path.name)
         test_asar=td/'app.asar';test_asar.write_bytes(new_asar);validate_asar(test_asar)
-    report_obj={'detectedVersion':detected_version,'testedBaselineVersion':VERSION,'compatibilityMode':'structure-checked','patches':report,'language':language_report,
+    report_obj={'detectedVersion':detected_version,'testedBaselineVersion':VERSION,'compatibilityMode':'structure-checked','patches':report,'language':language_report,'languageSource':REPOSITORY,'languageRevision':revision,
         'originalHeaderSHA256':old_hash,'newHeaderSHA256':new_hash,
         'asarSHA256':sha(new_asar),'exeSHA256':sha(patched_exe),
         'signedExeSignatureInvalidated':True,'runtimeTested':False,'resourcesRestored':False}
@@ -474,7 +497,8 @@ if __name__=='__main__':
     $oldEncoding = $env:PYTHONIOENCODING
     try {
         $env:PYTHONIOENCODING = 'utf-8'
-        $engineArgs = @($tempScript,'--app',$AppDir,'--language',$LanguageDir,'--node',$NodePath)
+        $engineArgs = @($tempScript,'--app',$AppDir,'--node',$NodePath)
+        if ($LanguageDir) { $engineArgs += @('--language',$LanguageDir) }
         if ($CheckOnly) { $engineArgs += '--check-only' }
         if ($Restore) { $engineArgs += '--restore' }
         & $PythonPath @engineArgs
